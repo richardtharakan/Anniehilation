@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_app_gradient"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="1dp"
+    android:paddingBottom="2dp">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:scrollbars="none"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- EXISTING ANNIEHILATION LOGO -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:clipChildren="true"
+                android:clipToPadding="true">
+
+                <ImageView
+                    android:id="@+id/appLogo"
+                    android:layout_width="304dp"
+                    android:layout_height="304dp"
+                    android:layout_gravity="top|center_horizontal"
+                    android:translationY="-102dp"
+                    android:contentDescription="Anniehilation logo"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/anniehilation_logo" />
+
+            </FrameLayout>
+
+            <!-- RAM GAUGE WITH LEFT GAME ICON AND RIGHT THERMOMETER -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="210dp"
+                android:layout_marginBottom="4dp"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <!-- Existing RAM gauge -->
+                <com.rictharakan.anniehilation.RamGaugeView
+                    android:id="@+id/ramGauge"
+                    android:layout_width="match_parent"
+                    android:layout_height="280dp"
+                    android:layout_gravity="top|center_horizontal"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="24dp" />
+
+                <!-- Game controller icon on the left -->
+                <ImageView
+                    android:id="@+id/gameModeIcon"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:layout_marginStart="0dp"
+                    android:padding="3dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="Open Anniehilation game"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_game_controller" />
+
+                <!-- Vertical thermometer on the right -->
+                <com.rictharakan.anniehilation.ThermometerView
+                    android:id="@+id/thermometerView"
+                    android:layout_width="38dp"
+                    android:layout_height="112dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="0dp" />
+
+            </FrameLayout>
+
+            <!-- EXISTING COOLDOWN BUTTON -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="46dp">
+
+                <Button
+                    android:id="@+id/btnCooldown"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_primary_button"
+                    android:backgroundTint="@null"
+                    android:elevation="0dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.04"
+                    android:text="⚡  RUN COOLDOWN"
+                    android:textAllCaps="false"
+                    android:textColor="#F5FCFF"
+                    android:textSize="16sp" />
+
+                <com.rictharakan.anniehilation.CooldownShimmerView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clickable="false"
+                    android:focusable="false" />
+
+            </FrameLayout>
+
+            <!-- EXISTING MEMORY BREAKDOWN PANEL -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_glass_card"
+                android:orientation="vertical"
+                android:paddingStart="11dp"
+                android:paddingEnd="11dp"
+                android:paddingTop="7dp"
+                android:paddingBottom="5dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.04"
+                    android:text="MEMORY BREAKDOWN"
+                    android:textColor="#48EBFF"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/ramInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginTop="3dp"
+                    android:fontFamily="monospace"
+                    android:gravity="center_vertical"
+                    android:lineSpacingExtra="1dp"
+                    android:maxLines="5"
+                    android:text="Reading RAM..."
+                    android:textColor="#F0F7FF"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <!-- EXISTING STORAGE HEADING -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.04"
+                android:text="STORAGE INTELLIGENCE"
+                android:textColor="#48EBFF"
+                android:textSize="13sp" />
+
+            <!-- EXISTING PHONE STORAGE -->
+            <com.rictharakan.anniehilation.StorageBarView
+                android:id="@+id/phoneStorage"
+                android:layout_width="match_parent"
+                android:layout_height="105dp" />
+
+            <!-- EXISTING SD STORAGE -->
+            <com.rictharakan.anniehilation.StorageBarView
+                android:id="@+id/sdStorage"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- EXISTING CLEAN JUNK BUTTON -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="2dp">
+
+        <Button
+            android:id="@+id/btnCleanJunk"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_primary_button"
+            android:backgroundTint="@null"
+            android:elevation="0dp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.04"
+            android:text="✧  CLEAN JUNK"
+            android:textAllCaps="false"
+            android:textColor="#F5FCFF"
+            android:textSize="16sp" />
+
+        <com.rictharakan.anniehilation.CooldownShimmerView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false" />
+
+    </FrameLayout>
+
+    <!-- EXISTING QUICK ACTIONS -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="30dp"
+        android:layout_marginTop="1dp"
+        android:background="@android:color/transparent"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <Button
+            android:id="@+id/btnStorage"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:minHeight="0dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
+            android:layout_marginEnd="5dp"
+            android:background="@drawable/bg_secondary_button"
+            android:backgroundTint="@null"
+            android:fontFamily="sans-serif-medium"
+            android:paddingStart="3dp"
+            android:paddingEnd="3dp"
+            android:text="App Storage"
+            android:textAllCaps="false"
+            android:textColor="#EAF7FF"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnBattery"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:minHeight="0dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
+            android:layout_marginStart="5dp"
+            android:background="@drawable/bg_secondary_button"
+            android:backgroundTint="@null"
+            android:fontFamily="sans-serif-medium"
+            android:paddingStart="3dp"
+            android:paddingEnd="3dp"
+            android:text="Battery Saver"
+            android:textAllCaps="false"
+            android:textColor="#EAF7FF"
+            android:textSize="13sp" />
+
+    </LinearLayout>
+
+    <!-- EXISTING HIDDEN STATUS VIEW -->
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
+
+</LinearLayout>

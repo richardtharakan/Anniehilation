@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Outer cyan glow-like rim -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <solid android:color="#553DEBFF" />
+            <stroke
+                android:width="1dp"
+                android:color="#BB48EBFF" />
+        </shape>
+    </item>
+
+    <!-- Violet glass border -->
+    <item
+        android:left="2dp"
+        android:top="2dp"
+        android:right="2dp"
+        android:bottom="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <gradient
+                android:angle="0"
+                android:startColor="#B33C83FF"
+                android:centerColor="#994A5EEA"
+                android:endColor="#AA48EBFF" />
+        </shape>
+    </item>
+
+    <!-- Dark glass centre -->
+    <item
+        android:left="3dp"
+        android:top="3dp"
+        android:right="3dp"
+        android:bottom="3dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="16dp" />
+            <gradient
+                android:angle="90"
+                android:startColor="#EE202D53"
+                android:centerColor="#F2152145"
+                android:endColor="#F40C1835" />
+            <stroke
+                android:width="1dp"
+                android:color="#6648EBFF" />
+        </shape>
+    </item>
+
+</layer-list>

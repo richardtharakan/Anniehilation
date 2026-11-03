@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_deep">#07111F</color>
+    <color name="background_mid">#0A1C30</color>
+    <color name="background_glow">#123C50</color>
+
+    <color name="glass_fill">#CC12263B</color>
+    <color name="glass_stroke">#663E91B5</color>
+    <color name="glass_stroke_bright">#9953DDF2</color>
+
+    <color name="accent_cyan">#63E7FF</color>
+    <color name="accent_blue">#398BFF</color>
+    <color name="accent_teal">#21D6C3</color>
+    <color name="accent_mint">#6CF5C2</color>
+    <color name="accent_purple">#8D78FF</color>
+
+    <color name="text_primary">#F4FAFF</color>
+    <color name="text_secondary">#A8BED1</color>
+    <color name="text_muted">#66839B</color>
+
+    <color name="transparent">#00000000</color>
+</resources>

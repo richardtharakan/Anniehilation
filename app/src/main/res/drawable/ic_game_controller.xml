@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Neon controller silhouette -->
+    <path
+        android:fillColor="#14294A"
+        android:strokeColor="#49E7FF"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round"
+        android:pathData="M14,15 L34,15 C39,15 42,19 43,25 L45,34 C46,39 41,42 37,38 L30,32 L18,32 L11,38 C7,42 2,39 3,34 L5,25 C6,19 9,15 14,15 Z" />
+
+    <!-- Direction pad -->
+    <path
+        android:strokeColor="#68F0FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M12,21 L12,29 M8,25 L16,25" />
+
+    <!-- Action buttons -->
+    <path
+        android:fillColor="#FF58D5"
+        android:pathData="M34,22 A2,2 0,1 0,34.1 22 Z" />
+
+    <path
+        android:fillColor="#49E7FF"
+        android:pathData="M38,27 A2,2 0,1 0,38.1 27 Z" />
+</vector>

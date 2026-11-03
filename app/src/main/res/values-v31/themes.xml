@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Anniehilation" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/accent_cyan</item>
+        <item name="colorSecondary">@color/accent_teal</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/background_deep</item>
+
+        <!-- Android 12+ splash screen appearance -->
+        <item name="android:windowSplashScreenBackground">@color/background_deep</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_transparent</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
+
+</resources>

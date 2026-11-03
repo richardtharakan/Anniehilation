@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cleanup_accessibility_description">User-started helper that opens Storage settings for selected apps and taps only Clear cache. It does not clear app data.</string>
+</resources>
