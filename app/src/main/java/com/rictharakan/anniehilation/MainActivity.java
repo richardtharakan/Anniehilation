@@ -1,5 +1,7 @@
 package com.rictharakan.anniehilation;
 
+import android.Manifest;
+import android.annotation.TargetApi;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
@@ -18,6 +20,7 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
+import android.media.MediaPlayer;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -42,6 +45,18 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.Set;
 
+/**
+ * Main dashboard for Anniehilation.
+ *
+ * Compatibility:
+ * - Android 8.0/API 26 and newer can use the dashboard, game hub, game,
+ *   battery-temperature display, RAM display and this app's own cache cleanup.
+ * - Android 11/API 30 and newer can additionally use All files access,
+ *   Android's external-app-cache confirmation and MediaStore trash requests,
+ *   subject to Android permissions and user approval.
+ * - Older Android versions do not call Android 11-only APIs. Shared-storage
+ *   thumbnail cleanup is attempted only when legacy storage access is available.
+ */
 public class MainActivity extends Activity {
 
     private TextView status, ramInfo;
@@ -50,6 +65,7 @@ public class MainActivity extends Activity {
     private RamGaugeView ramGauge;
     private StorageBarView phoneStorage, sdStorage;
     private ThermometerView thermometerView;
+    private MediaPlayer cooldownWhooshPlayer;
     private boolean batteryTemperatureReceiverRegistered = false;
     private boolean cooldownVisualActivated = false;
 
@@ -72,8 +88,6 @@ public class MainActivity extends Activity {
     private static final int REQUEST_DELETE_TRASHED_MEDIA = 702;
 
     private static final String CLEANUP_TAG = "AnniehilationCleanup";
-    // Android limits MediaStore delete requests to 2,000 URIs on recent target SDKs.
-    // Using this conservative limit also keeps the request size manageable on older releases.
     private static final int MAX_MEDIA_DELETE_BATCH_SIZE = 2000;
 
     private long trashedMediaBytes = 0L;
@@ -92,7 +106,7 @@ public class MainActivity extends Activity {
     private float lastActualRamFraction = 0f;
     private float lastPreviewFraction = 0f;
 
-    // Clearly illustrative startup-only cache preview.
+    // Illustrative startup-only preview; this is not measured cache data.
     private long previewCacheBytes;
 
     private long lastPreviewUsedBytes;
@@ -102,11 +116,7 @@ public class MainActivity extends Activity {
     private boolean ramValueTransitionStarted = false;
     private ValueAnimator ramValuesAnimator;
 
-    /**
-     * Updates the dashboard from Android's battery-status broadcast.
-     * Android reports EXTRA_TEMPERATURE in tenths of a degree Celsius.
-     * This is battery temperature, not CPU temperature.
-     */
+    /** Updates the dashboard from Android's battery-status broadcast. */
     private void updateBatteryTemperature(Intent intent) {
         if (thermometerView == null || intent == null) {
             return;
@@ -185,8 +195,7 @@ public class MainActivity extends Activity {
         // Stage 1: warm orange while the app starts.
         thermometerView.setVisualCoolingProgress(0f);
 
-        // Stage 2: move to green after startup settles, unless the user
-        // has already pressed RUN COOLDOWN.
+        // Stage 2: move to green after startup settles, unless cooldown was pressed.
         thermometerView.postDelayed(() -> {
             if (!cooldownVisualActivated) {
                 thermometerView.setVisualCoolingProgress(0.5f);
@@ -196,10 +205,12 @@ public class MainActivity extends Activity {
         Button storageButton = findViewById(R.id.btnStorage);
         Button batteryButton = findViewById(R.id.btnBattery);
 
-        // The controller icon is the entry point to the built-in Anniehilation game.
+        // The existing controller icon opens the six-game selection hub.
         View gameModeIcon = findViewById(R.id.gameModeIcon);
-        gameModeIcon.setOnClickListener(v ->
-                startActivity(new Intent(MainActivity.this, GameActivity.class)));
+        gameModeIcon.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, GameHubActivity.class);
+            startActivity(intent);
+        });
 
         cooldownButton.setOnClickListener(v -> runCooldown());
         cleanJunkButton.setOnClickListener(v -> startJunkCleanup());
@@ -217,8 +228,7 @@ public class MainActivity extends Activity {
 
         // Illustrative preview only: this is NOT measured cache.
         // Random range: 180 MB to 650 MB.
-        previewCacheBytes =
-                (180L + random.nextInt(471)) * 1024L * 1024L;
+        previewCacheBytes = (180L + random.nextInt(471)) * 1024L * 1024L;
 
         sdStorage.setVisibility(View.GONE);
 
@@ -235,6 +245,7 @@ public class MainActivity extends Activity {
                         + "\nLong-press Clean Junk for optional app-by-app cache cleanup."
         );
     }
+
     private void refreshDashboard() {
         updateRamInfo();
         updateStorageInfo();
@@ -252,9 +263,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        ActivityManager.MemoryInfo info =
-                new ActivityManager.MemoryInfo();
-
+        ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
         manager.getMemoryInfo(info);
 
         long total = info.totalMem;
@@ -268,8 +277,7 @@ public class MainActivity extends Activity {
         lastActualRamFraction = actualFraction;
 
         if (showStartupPreview) {
-            // Create an exaggerated visual preview while keeping the
-            // preview values clearly distinguished from actual readings.
+            // Exaggerated visual preview, clearly distinguished from live readings.
             long previewUsed = Math.min(
                     total,
                     Math.max(used, (long) (used * startupBoost))
@@ -285,10 +293,7 @@ public class MainActivity extends Activity {
             lastPreviewTotalBytes = total;
             hasPreviewRamValues = true;
 
-            ramGauge.setStartupPreviewFraction(
-                    actualFraction,
-                    startupBoost
-            );
+            ramGauge.setStartupPreviewFraction(actualFraction, startupBoost);
 
             ramInfo.setText(buildRamInfoText(
                     "RAM LOAD PREVIEW",
@@ -376,6 +381,7 @@ public class MainActivity extends Activity {
                 + formatRamMetric("TOTAL", formatBytes(total))
                 + "\n\n" + note;
     }
+
     private String formatRamMetric(String label, String value) {
         float charWidth = ramInfo.getPaint().measureText("0");
         int availableWidth = ramInfo.getWidth()
@@ -388,16 +394,16 @@ public class MainActivity extends Activity {
                     - Math.round(50f * density);
         }
 
+        int minimumColumns = label.length() + value.length() + 1;
         int columns = charWidth > 0f
-                ? Math.max(label.length() + value.length() + 1,
-                (int) (availableWidth / charWidth))
-                : label.length() + value.length() + 1;
+                ? Math.max(minimumColumns, (int) (availableWidth / charWidth))
+                : minimumColumns;
         int labelWidth = Math.max(label.length() + 1, columns - value.length());
 
         return String.format(Locale.ROOT, "%-" + labelWidth + "s%s", label, value);
     }
 
-    /** Animates the body text between the gauge's warm preview and cool live colours. */
+    /** Animates the body text between the warm preview and cool live colours. */
     private void animateRamInfoColor(boolean preview) {
         int targetColor = preview ? RAM_WARM_COLOR : RAM_COOL_COLOR;
         if (targetColor == ramInfoColorTarget) {
@@ -421,12 +427,11 @@ public class MainActivity extends Activity {
         );
         ramInfoColorAnimator.start();
     }
+
     private void updateStorageInfo() {
         // Always show internal phone storage.
         try {
-            StatFs internal =
-                    new StatFs(Environment.getDataDirectory().getPath());
-
+            StatFs internal = new StatFs(Environment.getDataDirectory().getPath());
             long total = internal.getTotalBytes();
             long free = internal.getAvailableBytes();
 
@@ -436,10 +441,7 @@ public class MainActivity extends Activity {
                     total
             );
         } catch (Exception e) {
-            phoneStorage.setUnavailable(
-                    "PHONE STORAGE",
-                    "Could not read phone storage"
-            );
+            phoneStorage.setUnavailable("PHONE STORAGE", "Could not read phone storage");
         }
 
         // Hide SD card panel unless a mounted removable card is found.
@@ -459,9 +461,7 @@ public class MainActivity extends Activity {
                         continue;
                     }
 
-                    String state =
-                            Environment.getExternalStorageState(dir);
-
+                    String state = Environment.getExternalStorageState(dir);
                     if (Environment.MEDIA_MOUNTED.equals(state)) {
                         removable = dir;
                         break;
@@ -478,7 +478,6 @@ public class MainActivity extends Activity {
 
         try {
             StatFs card = new StatFs(removable.getAbsolutePath());
-
             long cardTotal = card.getTotalBytes();
             long cardFree = card.getAvailableBytes();
 
@@ -487,13 +486,7 @@ public class MainActivity extends Activity {
             }
 
             long cardUsed = Math.max(0L, cardTotal - cardFree);
-
-            sdStorage.setStorageInfo(
-                    "SD CARD",
-                    cardUsed,
-                    cardTotal
-            );
-
+            sdStorage.setStorageInfo("SD CARD", cardUsed, cardTotal);
             sdStorage.setVisibility(View.VISIBLE);
 
         } catch (Exception ignored) {
@@ -506,9 +499,8 @@ public class MainActivity extends Activity {
             return;
         }
 
+        playCooldownWhoosh();
         cleanupRunning = true;
-
-        // Stage 3: animate to cool cyan-blue when RUN COOLDOWN is pressed.
         cooldownVisualActivated = true;
         if (thermometerView != null) {
             thermometerView.setVisualCoolingProgress(1f);
@@ -531,15 +523,11 @@ public class MainActivity extends Activity {
             long cleared = Math.max(0L, before - after);
 
             runOnUiThread(() -> {
-                // End the preview and show actual readings.
                 showStartupPreview = false;
                 refreshDashboard();
 
                 int visualDrop = Math.round(
-                        Math.max(
-                                0f,
-                                lastPreviewFraction - lastActualRamFraction
-                        ) * 100f
+                        Math.max(0f, lastPreviewFraction - lastActualRamFraction) * 100f
                 );
 
                 status.setText(
@@ -557,21 +545,24 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    /** Explains the special access request before opening Android Settings. */
+    /** Starts the optional shared-storage cleanup flow. */
     private void startJunkCleanup() {
         if (cleanupRunning) {
             return;
         }
 
+        // All files access exists only on Android 11/API 30 and newer.
+        // Older versions proceed with app-owned cache cleanup and any
+        // shared folders that are genuinely accessible in legacy storage mode.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                 && !Environment.isExternalStorageManager()) {
             new AlertDialog.Builder(this)
                     .setTitle("Allow All files access?")
                     .setMessage(
-                            "Android requires you to enable All files access in Settings "
-                                    + "before Anniehilation can scan shared-storage junk "
-                                    + "or request Android's app-cache cleanup. This prompt "
-                                    + "explains the request; Android Settings must grant it."
+                            "Android 11 and newer require All files access before "
+                                    + "Anniehilation can scan eligible shared-storage "
+                                    + "folders or request Android's external app-cache cleanup. "
+                                    + "You can cancel; the normal app and games will continue to work."
                     )
                     .setNegativeButton("Cancel", (dialog, which) ->
                             finishJunkCleanup(
@@ -587,7 +578,13 @@ public class MainActivity extends Activity {
         runJunkCleanup();
     }
 
+    @TargetApi(Build.VERSION_CODES.R)
     private void openAllFilesAccessSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            runJunkCleanup();
+            return;
+        }
+
         waitingForAllFilesAccess = true;
         cleanupRunning = true;
         setCleanupButtonsEnabled(false);
@@ -597,6 +594,7 @@ public class MainActivity extends Activity {
                 Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                 Uri.parse("package:" + getPackageName())
         );
+
         try {
             startActivity(intent);
         } catch (Exception e) {
@@ -609,12 +607,44 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Cleans this app's cache and eligible shared thumbnails, then asks Android
-     * to clear external app-cache directories. */
+    /**
+     * Returns true when this app can legitimately scan the legacy shared-storage
+     * thumbnail folders on Android versions before API 30.
+     */
+    private boolean hasLegacySharedStorageAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return false;
+        }
+
+        // Android 10 may enforce scoped storage depending on target SDK and opt-out.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && !Environment.isExternalStorageLegacy()) {
+            return false;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+
+            // WRITE_EXTERNAL_STORAGE remains relevant to legacy writes on Android 8/9
+            // and Android 10 apps running in legacy storage mode.
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** Cleans this app's cache and eligible shared thumbnails. */
     private void runJunkCleanup() {
         if (cleanupRunning) {
             return;
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                 && !Environment.isExternalStorageManager()) {
             finishJunkCleanup(
@@ -624,6 +654,10 @@ public class MainActivity extends Activity {
         }
 
         cleanupRunning = true;
+        cooldownVisualActivated = true;
+        if (thermometerView != null) {
+            thermometerView.setVisualCoolingProgress(1f);
+        }
         setCleanupButtonsEnabled(false);
         appCacheFreedBytes = 0L;
         sharedThumbnailBytesFreed = 0L;
@@ -668,17 +702,41 @@ public class MainActivity extends Activity {
                                     + "Android's device cache step was skipped."
                     );
                 } else {
+                    String legacyNote = hasLegacySharedStorageAccess()
+                            ? "Legacy shared-storage thumbnail scan was attempted."
+                            : "Shared thumbnail scan was skipped because this app does not "
+                            + "have legacy shared-storage permission or access. ";
                     finishJunkCleanup(
                             getCleanupSummary()
-                                    + "\nAndroid's all-app cache action requires Android 11 or later."
+                                    + "\nAndroid 8–10: this app's cache was cleaned. "
+                                    + "Android does not expose the Android 11 system-wide "
+                                    + "cache-cleanup request on these versions.\n"
+                                    + legacyNote
                     );
                 }
             });
         }).start();
     }
 
-    /** Android displays its required confirmation for external app-cache cleanup. */
+    /** Launches Android's confirmation screen for external app-cache cleanup. */
+    @TargetApi(Build.VERSION_CODES.R)
     private void requestSystemCacheClear() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            finishJunkCleanup(
+                    getCleanupSummary()
+                            + "\nSystem-wide external app-cache cleanup requires Android 11 or newer."
+            );
+            return;
+        }
+
+        if (!Environment.isExternalStorageManager()) {
+            finishJunkCleanup(
+                    getCleanupSummary()
+                            + "\nAll files access is not enabled; system cache cleanup was skipped."
+            );
+            return;
+        }
+
         try {
             status.setText(
                     "Android is asking to clear external app caches. "
@@ -697,7 +755,9 @@ public class MainActivity extends Activity {
             );
         }
     }
-    /** Finds shared photos, videos, and audio already marked as trashed. */
+
+    /** Finds shared photos, videos and audio already marked as trashed (API 30+). */
+    @TargetApi(Build.VERSION_CODES.R)
     private ArrayList<Uri> findMediaStoreTrash() {
         ArrayList<Uri> uris = new ArrayList<>();
         mediaTrashQueryError = null;
@@ -730,15 +790,19 @@ public class MainActivity extends Activity {
         return uris;
     }
 
-    /** Queries one typed MediaStore collection so every URI has a valid item-ID path. */
+    /** Queries one typed MediaStore collection so each URI has a valid item-ID path. */
+    @TargetApi(Build.VERSION_CODES.R)
     private boolean appendTrashedItemsFromCollection(
             Uri collection,
             ArrayList<Uri> destination) {
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            mediaTrashQueryError = "MediaStore trash scanning requires Android 11 or newer.";
+            return false;
+        }
+
         Bundle queryArgs = new Bundle();
-        queryArgs.putInt(
-                MediaStore.QUERY_ARG_MATCH_TRASHED,
-                MediaStore.MATCH_ONLY
-        );
+        queryArgs.putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY);
 
         String[] projection = {
                 BaseColumns._ID,
@@ -748,8 +812,7 @@ public class MainActivity extends Activity {
         try (Cursor cursor = getContentResolver().query(
                 collection, projection, queryArgs, null)) {
             if (cursor == null) {
-                mediaTrashQueryError = "MediaStore returned a null cursor for "
-                        + collection;
+                mediaTrashQueryError = "MediaStore returned a null cursor for " + collection;
                 Log.e(CLEANUP_TAG, mediaTrashQueryError);
                 return false;
             }
@@ -773,8 +836,17 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Sends matching shared-media trash directly to Android's delete confirmation. */
+    /** Requests deletion of matching shared-media trash through Android's confirmation UI. */
+    @TargetApi(Build.VERSION_CODES.R)
     private void requestMediaTrashDeletion() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            finishJunkCleanup(
+                    getCleanupSummary()
+                            + "\nMediaStore trash cleanup requires Android 11 or newer."
+            );
+            return;
+        }
+
         ArrayList<Uri> trashedItems = findMediaStoreTrash();
 
         if (mediaTrashQueryError != null) {
@@ -787,9 +859,7 @@ public class MainActivity extends Activity {
         }
 
         if (trashedItems.isEmpty()) {
-            finishJunkCleanup(
-                    getCleanupSummary() + "\nNo shared-media trash was found."
-            );
+            finishJunkCleanup(getCleanupSummary() + "\nNo shared-media trash was found.");
             return;
         }
 
@@ -802,8 +872,18 @@ public class MainActivity extends Activity {
         );
         startNextMediaDeleteRequest();
     }
+
     /** Requests permanent deletion in bounded batches through Android's confirmation UI. */
+    @TargetApi(Build.VERSION_CODES.R)
     private void startNextMediaDeleteRequest() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            finishJunkCleanup(
+                    getCleanupSummary()
+                            + "\nMedia deletion requests require Android 11 or newer."
+            );
+            return;
+        }
+
         if (pendingMediaDeleteIndex >= pendingTrashedMedia.size()) {
             finishJunkCleanup(
                     getCleanupSummary()
@@ -823,10 +903,7 @@ public class MainActivity extends Activity {
         );
 
         try {
-            PendingIntent request = MediaStore.createDeleteRequest(
-                    getContentResolver(),
-                    batch
-            );
+            PendingIntent request = MediaStore.createDeleteRequest(getContentResolver(), batch);
             startIntentSenderForResult(
                     request.getIntentSender(),
                     REQUEST_DELETE_TRASHED_MEDIA,
@@ -837,9 +914,7 @@ public class MainActivity extends Activity {
             );
         } catch (Exception e) {
             Log.e(CLEANUP_TAG, "Could not create or launch MediaStore delete request", e);
-            finishJunkCleanup(
-                    "Could not request media deletion: " + describeException(e)
-            );
+            finishJunkCleanup("Could not request media deletion: " + describeException(e));
         }
     }
 
@@ -860,9 +935,11 @@ public class MainActivity extends Activity {
                     ? "All files access: granted."
                     : "All files access: not granted.";
         }
+
         String cacheState = systemCacheClearCompleted
                 ? "Android external app-cache cleanup: confirmed."
                 : "Android external app-cache cleanup: not confirmed.";
+
         return accessState
                 + "\nThis app cache freed: " + formatBytes(appCacheFreedBytes)
                 + "\nAccessible thumbnail folders cleaned: "
@@ -871,7 +948,7 @@ public class MainActivity extends Activity {
                 + "\n" + cacheState;
     }
 
-    /** Displays the result without opening another dialog after cleanup. */
+    /** Updates the status panel and restores the cleanup buttons. */
     private void finishJunkCleanup(String message) {
         updateStorageInfo();
         status.setText(message);
@@ -884,6 +961,84 @@ public class MainActivity extends Activity {
         cleanupRunning = false;
         setCleanupButtonsEnabled(true);
     }
+
+    /** Plays the cooldown sound at a clear, steady level until the clip ends. */
+    private void playCooldownWhoosh() {
+        stopCooldownWhoosh();
+
+        try {
+            MediaPlayer player = MediaPlayer.create(this, R.raw.cooldown_whoosh);
+            if (player == null) {
+                Log.w(CLEANUP_TAG, "Cooldown whoosh could not be loaded. Check res/raw/cooldown_whoosh.wav.");
+                return;
+            }
+
+            cooldownWhooshPlayer = player;
+            player.setLooping(false);
+            player.setVolume(0.95f, 0.95f);
+            Log.i(CLEANUP_TAG, "Cooldown whoosh duration: " + player.getDuration() + " ms");
+
+            player.setOnCompletionListener(completedPlayer -> {
+                if (cooldownWhooshPlayer == completedPlayer) {
+                    cooldownWhooshPlayer = null;
+                }
+                completedPlayer.release();
+            });
+
+            player.setOnErrorListener((errorPlayer, what, extra) -> {
+                Log.w(CLEANUP_TAG, "Cooldown whoosh playback error: what=" + what
+                        + ", extra=" + extra);
+                if (cooldownWhooshPlayer == errorPlayer) {
+                    cooldownWhooshPlayer = null;
+                }
+                errorPlayer.release();
+                return true;
+            });
+
+            player.start();
+        } catch (Exception e) {
+            Log.w(CLEANUP_TAG, "Unable to play cooldown woosh audio.", e);
+            stopCooldownWhoosh();
+        }
+    }
+
+    /** Stops and releases the cooldown sound player. */
+    private void stopCooldownWhoosh() {
+        if (cooldownWhooshPlayer == null) {
+            return;
+        }
+
+        MediaPlayer player = cooldownWhooshPlayer;
+        cooldownWhooshPlayer = null;
+        try {
+            if (player.isPlaying()) {
+                player.stop();
+            }
+        } catch (IllegalStateException ignored) {
+            // The clip may have completed between the state check and stop.
+        } finally {
+            try {
+                player.release();
+            } catch (RuntimeException ignored) {
+                // Already released by an error/completion callback.
+            }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopCooldownWhoosh();
+        if (ramInfoColorAnimator != null) {
+            ramInfoColorAnimator.cancel();
+            ramInfoColorAnimator = null;
+        }
+        if (ramValuesAnimator != null) {
+            ramValuesAnimator.cancel();
+            ramValuesAnimator = null;
+        }
+        super.onDestroy();
+    }
+
     private void setCleanupButtonsEnabled(boolean enabled) {
         cooldownButton.setEnabled(enabled);
         cleanJunkButton.setEnabled(enabled);
@@ -910,6 +1065,7 @@ public class MainActivity extends Activity {
                         || packageManager.getLaunchIntentForPackage(appInfo.packageName) == null) {
                     continue;
                 }
+
                 CharSequence label = packageManager.getApplicationLabel(appInfo);
                 choices.add(new InstalledAppChoice(
                         appInfo.packageName,
@@ -925,6 +1081,7 @@ public class MainActivity extends Activity {
 
         Collections.sort(choices, (left, right) ->
                 left.label.compareToIgnoreCase(right.label));
+
         if (choices.isEmpty()) {
             status.setText("No selectable installed apps were found.");
             Toast.makeText(this, "No selectable apps were found.", Toast.LENGTH_LONG).show();
@@ -971,6 +1128,7 @@ public class MainActivity extends Activity {
         );
         picker.show();
     }
+
     private void startSelectedAppCachePass(ArrayList<String> packageNames) {
         if (isCleanupAccessibilityServiceEnabled()) {
             CleanupAccessibilityService.beginCleanup(this, packageNames);
@@ -1016,6 +1174,7 @@ public class MainActivity extends Activity {
         );
         String fullName = component.flattenToString();
         String shortName = component.flattenToShortString();
+
         for (String enabledService : enabledServices.split(":")) {
             if (fullName.equalsIgnoreCase(enabledService)
                     || shortName.equalsIgnoreCase(enabledService)) {
@@ -1041,6 +1200,7 @@ public class MainActivity extends Activity {
         if (joinedPackages == null || joinedPackages.isEmpty()) {
             return packageNames;
         }
+
         for (String packageName : joinedPackages.split("\\n")) {
             if (!packageName.trim().isEmpty()) {
                 packageNames.add(packageName.trim());
@@ -1059,6 +1219,7 @@ public class MainActivity extends Activity {
         if (requestCode == REQUEST_CLEAR_APP_CACHES) {
             systemCacheClearCompleted = resultCode == RESULT_OK;
             updateStorageInfo();
+
             if (systemCacheClearCompleted) {
                 requestMediaTrashDeletion();
             } else {
@@ -1071,6 +1232,7 @@ public class MainActivity extends Activity {
                                 + "\nMedia trash was not scanned."
                 );
             }
+
         } else if (requestCode == REQUEST_DELETE_TRASHED_MEDIA) {
             if (resultCode == RESULT_OK) {
                 pendingMediaDeleteIndex = currentMediaBatchEnd;
@@ -1085,20 +1247,18 @@ public class MainActivity extends Activity {
             }
         }
     }
+
     private void openAppStorageSettings() {
         Intent intent = new Intent(
                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + getPackageName())
         );
-
         startActivity(intent);
     }
 
     private void openBatterySaverSettings() {
         try {
-            startActivity(
-                    new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
-            );
+            startActivity(new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS));
         } catch (Exception e) {
             try {
                 startActivity(new Intent(Settings.ACTION_SETTINGS));
@@ -1113,11 +1273,17 @@ public class MainActivity extends Activity {
         long bytesFreed;
     }
 
-    /** Clears only legacy shared-storage directories explicitly named .thumbnails. */
+    /** Clears only explicitly named legacy shared-storage .thumbnails folders. */
     private ThumbnailCleanupResult clearSharedThumbnailCaches() {
         ThumbnailCleanupResult result = new ThumbnailCleanupResult();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                && !Environment.isExternalStorageManager()) {
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                return result;
+            }
+        } else if (!hasLegacySharedStorageAccess()) {
+            // Do not attempt broad shared-storage scanning when legacy access
+            // is unavailable. App-owned cache cleanup has already completed.
             return result;
         }
 
@@ -1182,6 +1348,7 @@ public class MainActivity extends Activity {
             int[] directoryBudget,
             Set<String> visited,
             ArrayList<File> results) {
+
         if (directory == null
                 || depthRemaining < 0
                 || directoryBudget[0] <= 0
@@ -1210,6 +1377,7 @@ public class MainActivity extends Activity {
             if (children == null) {
                 return;
             }
+
             for (File child : children) {
                 if (child.isDirectory()) {
                     findThumbnailDirectories(
@@ -1248,21 +1416,22 @@ public class MainActivity extends Activity {
             }
 
             try {
-                file.delete();
-            } catch (SecurityException ignored) {
-                // Skip files this app cannot delete.
+                boolean deleted = file.delete();
+                if (!deleted && file.exists()) {
+                    Log.w(CLEANUP_TAG, "Could not delete cache item: " + file.getAbsolutePath());
+                }
+            } catch (SecurityException e) {
+                Log.w(CLEANUP_TAG, "No permission to delete: " + file.getAbsolutePath(), e);
             }
         }
     }
 
     private long getCacheSize() {
         long size = folderSize(getCacheDir());
-
         File external = getExternalCacheDir();
         if (external != null) {
             size += folderSize(external);
         }
-
         return size;
     }
 
@@ -1277,13 +1446,11 @@ public class MainActivity extends Activity {
 
         long size = 0L;
         File[] files = directory.listFiles();
-
         if (files != null) {
             for (File file : files) {
                 size += folderSize(file);
             }
         }
-
         return size;
     }
 
@@ -1293,24 +1460,16 @@ public class MainActivity extends Activity {
         }
 
         double kb = bytes / 1024.0;
-
         if (kb < 1024.0) {
-            return String.format(
-                    Locale.getDefault(), "%.1f KB", kb
-            );
+            return String.format(Locale.getDefault(), "%.1f KB", kb);
         }
 
         double mb = kb / 1024.0;
-
         if (mb < 1024.0) {
-            return String.format(
-                    Locale.getDefault(), "%.1f MB", mb
-            );
+            return String.format(Locale.getDefault(), "%.1f MB", mb);
         }
 
-        return String.format(
-                Locale.getDefault(), "%.2f GB", mb / 1024.0
-        );
+        return String.format(Locale.getDefault(), "%.2f GB", mb / 1024.0);
     }
 
     @Override
@@ -1327,6 +1486,7 @@ public class MainActivity extends Activity {
                 CleanupAccessibilityService.KEY_WAITING_FOR_ENABLE,
                 false
         );
+
         if (waitingToEnable) {
             waitingForAccessibilitySettings = false;
             accessibilityPreferences.edit()
@@ -1337,11 +1497,13 @@ public class MainActivity extends Activity {
                     CleanupAccessibilityService.KEY_PENDING_PACKAGES,
                     ""
             );
+
             if (isCleanupAccessibilityServiceEnabled()) {
                 ArrayList<String> packageNames = splitPackageNames(queuedPackages);
                 accessibilityPreferences.edit()
                         .remove(CleanupAccessibilityService.KEY_PENDING_PACKAGES)
                         .commit();
+
                 if (!packageNames.isEmpty()) {
                     CleanupAccessibilityService.beginCleanup(this, packageNames);
                     status.setText("Opening Android Storage settings for selected apps...");
@@ -1376,6 +1538,7 @@ public class MainActivity extends Activity {
         if (waitingForAllFilesAccess) {
             waitingForAllFilesAccess = false;
             cleanupRunning = false;
+
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R
                     || Environment.isExternalStorageManager()) {
                 runJunkCleanup();
@@ -1387,11 +1550,8 @@ public class MainActivity extends Activity {
             return;
         }
 
-        if (ramGauge != null
-                && phoneStorage != null
-                && sdStorage != null) {
+        if (ramGauge != null && phoneStorage != null && sdStorage != null) {
             refreshDashboard();
         }
     }
 }
-

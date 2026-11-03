@@ -104,6 +104,30 @@ final class CinematicRoomManager {
 
     private final RoomDef[] roomCache = new RoomDef[ROOM_COUNT];
 
+    // World boundaries: 6 stages per world for Worlds 1-7, then 8 stages in World 8.
+    // Finale stages are 6, 12, 18, 24, 30, 36, 42 and 50.
+    private static final int[] WORLD_STAGE_COUNTS = {6, 6, 6, 6, 6, 6, 6, 8};
+    private static final int[] WORLD_STARTS = {0, 6, 12, 18, 24, 30, 36, 42};
+
+    static int worldIndexForStage(int stageId) {
+        int safeId = Math.max(0, Math.min(ROOM_COUNT - 1, stageId));
+        for (int world = 0; world < WORLD_STARTS.length; world++) {
+            int end = WORLD_STARTS[world] + WORLD_STAGE_COUNTS[world];
+            if (safeId >= WORLD_STARTS[world] && safeId < end) return world;
+        }
+        return WORLD_STARTS.length - 1;
+    }
+
+    static int stageIndexInWorld(int stageId) {
+        int safeId = Math.max(0, Math.min(ROOM_COUNT - 1, stageId));
+        return safeId - WORLD_STARTS[worldIndexForStage(safeId)];
+    }
+
+    static boolean isWorldFinale(int stageId) {
+        int world = worldIndexForStage(stageId);
+        return stageIndexInWorld(stageId) == WORLD_STAGE_COUNTS[world] - 1;
+    }
+
     private static final String[] WORLD_NAMES = {
             "THE SCHOOL GROUNDS", "THE OLD CITY", "THE FORGOTTEN FORT",
             "THE WILD JUNGLE", "THE UNDERGROUND KINGDOM", "THE MOUNTAIN PASSAGE",
@@ -133,8 +157,8 @@ final class CinematicRoomManager {
     }
 
     private RoomDef makeRoom(int id) {
-        int world = Math.min(7, id / 7);
-        int stageInWorld = id % 7;
+        int world = worldIndexForStage(id);
+        int stageInWorld = stageIndexInWorld(id);
         int pattern = (id * 7 + stageInWorld * 3) % 6;
         int[] palette = PALETTES[world];
 
@@ -217,32 +241,41 @@ final class CinematicRoomManager {
             obstacles.add(new ObstacleDef(ObstacleDef.MOVING_PLATFORM, .45f, .19f, .12f, id * .23f));
         }
 
-        // One to three ordinary enemies; every seventh stage ends with the boss version.
-        boolean bossStage = (stageInWorld == 6) || id == ROOM_COUNT - 1;
-        int enemyCount = 1 + ((id + 1) % 3);
-        float[] spawnX = {.40f, .61f, .75f};
+        // Finales retain the normal authored terrain, hazards, gates and ladders.
+        // They add one boss plus two ordinary villains rather than replacing the room.
+        boolean bossStage = isWorldFinale(id);
+        int enemyCount = bossStage ? 3 : 1 + ((id + 1) % 3);
+        float[] regularSpawnX = {.48f, .61f, .75f};
+        float[] finaleSpawnX = {.25f, .52f, .75f};
         for (int i = 0; i < enemyCount; i++) {
-            boolean boss = bossStage && i == enemyCount - 1;
-            float hp = boss ? 205f + world * 14f : 74f + world * 8f + i * 7f;
-            enemies.add(new EnemyDef(spawnX[i], .055f + .012f * ((id + i) % 3), hp, boss));
+            boolean boss = bossStage && i == 1;
+            float hp = boss ? 235f + world * 16f : 74f + world * 8f + i * 7f;
+            float spawn = bossStage ? finaleSpawnX[i] : regularSpawnX[i];
+            float patrol = bossStage
+                    ? (boss ? .14f : .045f + .012f * ((id + i) % 3))
+                    : .055f + .012f * ((id + i) % 3);
+            enemies.add(new EnemyDef(spawn, patrol, hp, boss));
         }
 
-        boolean hasGate = id % 5 == 2 || id % 5 == 4;
+        boolean hasGate = (id % 5 == 2 || id % 5 == 4);
         float plateX = hasGate ? .22f : -1f;
         float gateX = hasGate ? .80f : -1f;
-        boolean hasLadder = id % 4 == 1 || id % 4 == 3;
-        float ladderX = hasLadder ? .885f : -1f;
+        boolean hasLadder = (id % 4 == 1 || id % 4 == 3);
+        float ladderX = hasLadder ? (bossStage ? .70f : .885f) : -1f;
         float ladderTop = hasLadder ? .50f : -1f;
-        if (hasLadder) platforms.add(new PlatformDef(.81f, .16f, .118f));
+        if (hasLadder) {
+            platforms.add(new PlatformDef(bossStage ? .63f : .81f, .16f, .118f));
+        }
 
         int previous = id > 0 ? id - 1 : -1;
         int next = id < ROOM_COUNT - 1 ? id + 1 : -1;
         int[] links = {previous, next, -1, -1};
 
-        String title = String.format("%s · STAGE %02d", TITLES[world], id + 1);
+        String title = TITLES[world];
         String subtitle = subtitleFor(id, obstacles, hasGate, hasLadder, bossStage);
-        // Every level ends at Xingxing; completing the reunion advances to the next stage.
-        float monkeyX = .91f;
+        // Xingxing exists only in world-final chapters, and the game view keeps him hidden
+        // until that chapter's boss has actually been defeated.
+        float monkeyX = bossStage ? .91f : -1f;
 
         return new RoomDef(id, title, subtitle, world,
                 palette[0], palette[1], palette[2], palette[3], palette[4], palette[5],
@@ -253,7 +286,7 @@ final class CinematicRoomManager {
     private String subtitleFor(int id, List<ObstacleDef> obstacles,
                                boolean gate, boolean ladder, boolean boss) {
         StringBuilder s = new StringBuilder("Stage ").append(id + 1).append(" / 50 · ");
-        if (boss) s.append("Watch the boss's acrobatics. ");
+        if (boss) s.append("Defeat the world boss to reunite with Xingxing. ");
         if (gate) s.append("Find the pressure plate. ");
         if (ladder) s.append("A ladder offers a higher route. ");
         if (!obstacles.isEmpty()) {
@@ -264,7 +297,8 @@ final class CinematicRoomManager {
             else if (type == ObstacleDef.FALLING_ROCK) s.append("Watch the ceiling. ");
             else if (type == ObstacleDef.WATER_POOL) s.append("Cross the water carefully. ");
         }
-        s.append("Reach Xingxing!");
+        if (boss) s.append("Find Xingxing after the boss falls.");
+        else s.append("Reach the next passage.");
         return s.toString();
     }
 }
